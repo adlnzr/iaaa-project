@@ -24,6 +24,9 @@ class MRIDataset(Dataset):
         abnormal_path = list(self.labels[self.labels['prediction'] == 1].reset_index(
             drop=True)["SeriesInstanceUID"])
 
+        random.Random(random_state).shuffle(normal_path)
+        random.Random(random_state).shuffle(abnormal_path)
+
         normal_val_samples = int(len(normal_path) * 0.2)
         abnormal_val_samples = int(len(abnormal_path) * 0.2)
 
