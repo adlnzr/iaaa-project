@@ -1,6 +1,11 @@
 data/
-saved_models/
+
+docks/
+
 iaaa-mri-train.zip
+
+saved_models/
+
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
