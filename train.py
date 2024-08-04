@@ -6,7 +6,6 @@ from sklearn.metrics import precision_score, recall_score, roc_auc_score, confus
 from torch.nn.functional import sigmoid
 from tqdm import tqdm
 
-
 class Trainer:
     def __init__(self, model, criterion, optimizer, train_dl, val_dl, train_dataset, val_dataset, device, num_epochs, patience, threshold, save_path):
         self.model = model
@@ -23,6 +22,21 @@ class Trainer:
         self.best_avg_metric = 0
         self.epochs_no_improve = 0
         self.save_path = save_path
+    #     self._initialize_parameters()
+    
+    # def _initialize_parameters(self):
+    #     # Initialize only the first layer's weights
+    #     first_layer = next(self.model.children())
+    #     last_layers = list(list(self.model.children())[-1].fc.children())
+    #     if isinstance(first_layer, (torch.nn.Conv2d, torch.nn.Linear)):
+    #         torch.nn.init.kaiming_normal_(first_layer.weight, nonlinearity='relu')
+    #         if first_layer.bias is not None:
+    #             torch.nn.init.zeros_(first_layer.bias)
+    #     for last_layer in last_layers:
+    #         if isinstance(last_layer, (torch.nn.Conv2d, torch.nn.Linear)):
+    #             torch.nn.init.kaiming_normal_(last_layer.weight, nonlinearity='relu')
+    #             if first_layer.bias is not None:
+    #                 torch.nn.init.zeros_(first_layer.bias)    
 
     def train_one_epoch(self):
         self.model.train()
@@ -61,7 +75,7 @@ class Trainer:
             labels = labels.float().to(device=self.device)
 
             outputs = self.model(images)
-            # Apply sigmoid to convert logits to probabilities
+
             outputs = sigmoid(outputs)
 
             preds = (outputs > self.threshold).float()
@@ -112,10 +126,8 @@ class Trainer:
             train_loss, train_accuracy = self.train_one_epoch()
             val_accuracy, precision, recall, auc, avg_metric = self.evaluate()
 
-            print(f"Epoch {epoch+1}/{self.num_epochs}, Train Loss: {
-                  train_loss:.4f}, Train Accuracy: {train_accuracy:.4f}")
-            print(f"Epoch {epoch+1}/{self.num_epochs}, Val Accuracy: {val_accuracy:.4f}, Precision: {
-                  precision:.4f}, Recall: {recall:.4f}, AUC: {auc:.4f}, Avg Metric: {avg_metric:.4f}")
+            print(f"Epoch {epoch+1}/{self.num_epochs}, Train Loss: {train_loss:.4f}, Train Accuracy: {train_accuracy:.4f}")
+            print(f"Epoch {epoch+1}/{self.num_epochs}, Val Accuracy: {val_accuracy:.4f}, Precision: {precision:.4f}, Recall: {recall:.4f}, AUC: {auc:.4f}, Avg Metric: {avg_metric:.4f}")
 
             if self.early_stopping(avg_metric):
                 break

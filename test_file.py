@@ -2,7 +2,8 @@
 
 import numpy as np
 import torch
-from sklearn.metrics import precision_score, recall_score, roc_auc_score
+from sklearn.metrics import precision_score, recall_score, roc_auc_score, confusion_matrix
+from torch.nn.functional import sigmoid
 
 
 class Tester:
@@ -25,7 +26,9 @@ class Tester:
             labels = labels.float().to(device=self.device)
 
             outputs = self.model(images)
-            # convert logits to binary predictions
+
+            outputs = sigmoid(outputs)
+
             preds = (outputs > self.threshold).float()
             test_correct += (preds == labels).sum().item()
 
@@ -43,6 +46,10 @@ class Tester:
         auc = roc_auc_score(all_labels, all_preds)
 
         avg_metric = (precision + recall + auc) / 3
+
+        conf_matrix = confusion_matrix(all_labels, all_preds_binary)
+        print("Confusion Matrix:")
+        print(conf_matrix)
 
         # Print the metrics
         print(f"Test Accuracy: {test_accuracy:.4f}, Precision: {precision:.4f}, Recall: {
