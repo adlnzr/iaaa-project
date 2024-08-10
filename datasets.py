@@ -94,11 +94,12 @@ class MRIDataset(Dataset):
         if self.max_slices:
             padding_needed = self.max_slices - len(images)
             if padding_needed > 0:
-                padding_image = np.zeros_like(images[0])
-                images.extend([padding_image] * padding_needed)
+                extra_slices = random.choices(images, k = padding_needed)
+                images.extend(extra_slices)
 
         return images
-    
+
+
 
 class BalancedMRIDataset(Dataset):
     def __init__(self, data_path, labels_path, split="train", transform=None, augment_transform=None, max_slices=None, augment=False, random_state=42):
@@ -185,8 +186,8 @@ class BalancedMRIDataset(Dataset):
         if self.max_slices:
             padding_needed = self.max_slices - len(images)
             if padding_needed > 0:
-                padding_image = np.zeros_like(images[0])
-                images.extend([padding_image] * padding_needed)
+                extra_slices = random.choices(images, k = padding_needed)
+                images.extend(extra_slices)
 
         return images
 
