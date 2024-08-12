@@ -16,6 +16,7 @@ import pandas as pd
 import numpy as np
 import torch
 import pydicom
+from PIL import Image
 
 from torch.utils.data import Dataset
 from torchvision import transforms
@@ -61,14 +62,17 @@ class MRIDataset(Dataset):
         patient_id = self.patient_list[idx]
         images = self.load_patient_images(patient_id)
 
+        # data needs to be "array"/"PIL image" to be applied by transforms
+        images = [Image.fromarray(image, mode= 'L') if isinstance(image, np.ndarray) else image for image in images]
+                
         if self.transform:
             images = [self.transform(image) for image in images]
         else:
             images = [torch.tensor(img, dtype=torch.float32) for img in images]
 
-        # [18,1,h,w] stack images along the 0th dimension
+        # [max_slice,1,h,w] stack images along the 0th dimension
         images = torch.stack(images)
-        images = images.squeeze(1)  # [18,h,w] remove the channel dimension
+        images = images.squeeze(1)  # [max_slice,h,w] remove the channel dimension
 
         label = self.labels[self.labels['SeriesInstanceUID']
                             == patient_id]['prediction'].values
@@ -86,10 +90,13 @@ class MRIDataset(Dataset):
         for dcm_path in dcm_paths:
             dcm_data = pydicom.dcmread(dcm_path)
             image_array = dcm_data.pixel_array
-            image_array = image_array / \
-                np.max(image_array)  # normalize the image
+            # image_array = image_array / \
+            #     np.max(image_array)  # normalize the image
             images.append(image_array)
-
+        '''
+        normalize the image is commented out, instead transforms.Normalize with actual 
+        mean and std of the dataset is used
+        '''
         # pad the images to max_slices
         if self.max_slices:
             padding_needed = self.max_slices - len(images)
@@ -135,7 +142,7 @@ class BalancedMRIDataset(Dataset):
 
     def augment_data(self, minority_class_patients):
         """
-        Add augmented samples for the minority class.
+        add augmented samples for the minority class.
         """
         augmented_patients = []
 
@@ -155,15 +162,18 @@ class BalancedMRIDataset(Dataset):
         patient_id = self.patient_list[idx]
         images = self.load_patient_images(patient_id)
 
+        # data needs to be "array"/"PIL image" to be applied by transforms
+        images = [Image.fromarray(image, mode= 'L') if isinstance(image, np.ndarray) else image for image in images]
+                
         if self.transform:
-            images = [self.transform(image) for image in images]
+            # apply augmentation if it's a minority class patient
+            if self.augment and self.labels[self.labels['SeriesInstanceUID'] == patient_id]['prediction'].values[0] == 1:
+                images = [self.augment_transform(image) for image in images]
+
+            else: images = [self.transform(image) for image in images]
         else:
-            images = [torch.tensor(img, dtype=torch.float32) for img in images]
-
-        # Apply augmentation if it's a minority class patient
-        if self.augment and self.labels[self.labels['SeriesInstanceUID'] == patient_id]['prediction'].values[0] == 1:
-            images = [self.augment_transform(image) for image in images]
-
+            images = [torch.tensor(img, dtype=torch.float32) for img in images] 
+        
         images = torch.stack(images)
         images = images.squeeze(1)  # remove the channel dimension
 
@@ -180,9 +190,13 @@ class BalancedMRIDataset(Dataset):
         for dcm_path in dcm_paths:
             dcm_data = pydicom.dcmread(dcm_path)
             image_array = dcm_data.pixel_array
-            image_array = image_array / np.max(image_array)  # normalize the image
+            # image_array = image_array / np.max(image_array)  # normalize the image
             images.append(image_array)
 
+        '''
+        normalize the image is commented out, instead transforms.Normalize with 
+        actual mean and std of the dataset is used
+        '''
         if self.max_slices:
             padding_needed = self.max_slices - len(images)
             if padding_needed > 0:

@@ -88,8 +88,9 @@ class TesterOneChannel:
             stacked_output = torch.stack(output_list, dim=0) # [20, 32, 1]
             
             final_output = torch.mean(stacked_output, dim=0) # [32, 1]
+            final_output = sigmoid(final_output)
 
-            preds = (sigmoid(final_output) > self.threshold).float()
+            preds = (final_output > self.threshold).float()
             test_correct += (preds == labels).sum().item()
 
             all_labels.extend(labels.cpu().numpy())

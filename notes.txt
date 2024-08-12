@@ -16,3 +16,6 @@ models.py and train.py and test.py now contain class for 1-channel dataset
 as the last layer of the models are just linear functions it sounds fine 
 BCEWithlogits for the loss functions
 for the data entry for the metrics, model output might works better with sigmid
+
+transforms.Normalize(mean , std) with actual mean and std
+(mean and std has been re-sclaed as [0,1] data range due to ToTensor)
