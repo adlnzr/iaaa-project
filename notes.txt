@@ -1,0 +1,21 @@
+missmatch between preds in the two files:
+
+test_file: preds = (outputs > self.threshold).float()
+train_file: preds = (sigmoid(outputs) > self.threshold).float()
+
+it is supposed there is no sigmoid in last layer of the model so 
+sigmoid is needed for preds and loss is: BCEWithlogits 
+
+new dataset class has been added to avoid the unbalanced dataset: BalancedMRIDataset
+original labels ratio (MRIDatset): 20 to 80
+new labels ratio (BalancedMRIDataset): 42 to 58
+
+image channels: 20 (mri images for each patient)
+models.py and train.py and test.py now contain class for 1-channel dataset
+
+as the last layer of the models are just linear functions it sounds fine 
+BCEWithlogits for the loss functions
+for the data entry for the metrics, model output might works better with sigmid
+
+transforms.Normalize(mean , std) with actual mean and std
+(mean and std has been re-sclaed as [0,1] data range due to ToTensor)

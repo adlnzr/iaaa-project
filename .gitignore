@@ -173,3 +173,6 @@ pretrained/
 
 # os files
 .DS_Store
+
+# venv
+iaaa-venv/
