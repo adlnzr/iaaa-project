@@ -4,6 +4,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torchvision import models
+from transformers import AutoModel, AutoConfig, AutoModelForImageClassification, AutoImageProcessor
+
 
 '''
 CNN class ->
@@ -61,16 +63,15 @@ class MriResentModel(nn.Module):
     def __init__(self, in_dim, out_dim):
         super().__init__()
 
-        self.conv = nn.Conv2d(in_dim, 3, kernel_size=1, padding=0)
-
-        # instantiate transfer learning model
         self.resnet_model = models.resnet50(pretrained=True)
 
-        # set all paramters as trainable
-        for param in self.resnet_model.parameters():
-            param.requires_grad = True
+        # modify the first convolutional layer to accept 1-channel input 
+        self.resnet_model.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
+        
+        # reinitialize the weights of this layer
+        nn.init.kaiming_normal_(self.resnet_model.conv1.weight, mode='fan_out', nonlinearity='relu')
 
-        # get input of fc layer
+        # get input of fc layer (last layer)
         n_inputs = self.resnet_model.fc.in_features  # 2048
 
         # redefine fc layer / top layer/ head for our classification problem
@@ -80,18 +81,20 @@ class MriResentModel(nn.Module):
                                              nn.Linear(2048, 2048),
                                              nn.SELU(),
                                              nn.Dropout(p=0.4),
-                                             nn.Linear(2048, out_dim),
-                                            #  nn.LogSigmoid()
-        )
-
-        # set model to run on GPU or CPU absed on availibility
-        # self.resnet_model.to(device)
-
+                                             nn.Linear(2048, out_dim)                  
+        ) # Note - no softmax on last layer so sigmoid/softmax for the criterion and metrics
+        
+        # set all paramters as trainable
+        for param in self.resnet_model.parameters():
+            param.requires_grad = True
+        
     def forward(self, x):
-        x = self.conv(x)
         x = self.resnet_model(x)
         return x
 
+'''
+
+'''
 
 class UNet(nn.Module):
     def __init__(self, in_channels, out_channels):
@@ -155,6 +158,48 @@ class UNet(nn.Module):
         out = self.outconv(dec1)
         return out
 
+'''
+class ResNet18MRI ->
+
+resnet 18 pretrained model on brain mri images
+model first layer modified to take 1-channel image instead of 3-channel
+model last layer modified to output=1 instead of output=2
+model fine tuned on just first layer and last layer 
+'''
+
+class ResNet18MRI(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+        self.processor = AutoImageProcessor.from_pretrained("BehradG/resnet-18-finetuned-MRI-Brain")
+        self.model = AutoModelForImageClassification.from_pretrained("BehradG/resnet-18-finetuned-MRI-Brain", 
+                                                         num_channels=1,
+                                                         ignore_mismatched_sizes=True)
+
+        # initialize the weights using Kaiming initialization
+        nn.init.kaiming_normal_(self.model.resnet.embedder.embedder.convolution.weight, mode='fan_out', nonlinearity='relu')
+
+        if self.model.resnet.embedder.embedder.convolution.bias is not None:
+            nn.init.zeros_(self.model.resnet.embedder.embedder.convolution.bias)
+        
+        # modifying last fully connected layer to change the outputs=1
+        self.linear_layer = self.model.classifier[1]
+        self.modified_linear_layer = nn.Linear(in_features=self.linear_layer.in_features, out_features=1)
+        self.model.classifier[1] = self.modified_linear_layer
+
+        for param in self.model.parameters():
+            param.requires_grad = False
+
+        for param in self.model.resnet.embedder.embedder.convolution.parameters():
+            param.requires_grad = True
+
+        for param in self.model.classifier.parameters():
+            param.requires_grad = True
+
+    def forward(self,x):
+        x = self.model(x)
+        return x
+
 
 # class CNN(nn.Module):
 #     def __init__(self, in_channels=20, out_channels=1):
@@ -162,7 +207,7 @@ class UNet(nn.Module):
 
 #         self.cnn1 = nn.Conv2d(in_channels=in_channels,
 #                               out_channels=64, kernel_size=5)
-#         # size-> (64,220,220)
+#         # size -> (64,220,220)
 #         self.maxpool = nn.MaxPool2d(kernel_size=2)
 #         # size -> (64,110,110)
 #         self.cnn2 = nn.Conv2d(in_channels=64, out_channels=128, kernel_size=5)
