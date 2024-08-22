@@ -254,7 +254,7 @@ class Trainer_for_resnet18:
                 all_labels.extend(label.cpu().numpy())
                 all_preds.extend(val_max_vot.squeeze(1).cpu().numpy())
 
-        val_accuracy = val_correct / len(self.val_dataset)
+        val_accuracy = val_correct / (len(self.val_dataset) * 20)
         all_labels = np.array(all_labels)
         all_preds = np.array(all_preds)
 
