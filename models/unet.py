@@ -29,6 +29,12 @@ class UNet(nn.Module):
         # Output
         self.outconv = nn.Conv2d(64, out_channels, kernel_size=1)
 
+        # Global average pooling
+        self.global_avg_pool = nn.AdaptiveAvgPool2d(1)  # Pool to (16, 1, 1, 1)
+
+        # Optional fully connected layer if you want to further process the pooled output
+        # self.fc = nn.Linear(1, 1)
+
     def conv_block(self, in_channels, out_channels):
         return nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1),
@@ -65,4 +71,12 @@ class UNet(nn.Module):
         dec1 = self.dec1(dec1)
 
         out = self.outconv(dec1)
+
+        # Apply global average pooling
+        out = self.global_avg_pool(out)  # Shape: (batch_size, out_channels, 1, 1)
+
+        # Optional: Flatten and apply a fully connected layer
+        out = out.view(out.size(0), -1)  # Flatten to (batch_size, out_channels)
+        # out = self.fc(out)  # Uncomment if using the fully connected layer
+
         return out
