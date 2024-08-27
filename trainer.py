@@ -7,6 +7,7 @@ from torch.nn.functional import sigmoid
 from collections import Counter
 from tqdm import tqdm
 from tester import Tester
+import matplotlib.pyplot as plt
 
 
 '''
@@ -36,7 +37,6 @@ class Trainer:
         self.epochs_no_improve = 0
         self.save_path = save_path
 
-
         # Initialize the Tester instance
         self.tester = Tester(
             model=self.model,
@@ -51,6 +51,7 @@ class Trainer:
         self.model.train()
         train_loss = 0.0
         train_correct = 0.0
+        epoch_losses = [] # for plotting purpose
 
         for images, label in tqdm(self.train_dl):
             images = images.float().to(device=self.device)
@@ -75,6 +76,8 @@ class Trainer:
 
                 train_loss += loss.item()
 
+                epoch_losses.append(loss.item()) # for plotting purpose
+
             train_preds = [(sigmoid(x) > self.threshold).float() for x in patient_outputs]
             train_stacked_preds = torch.stack(train_preds)
             train_sum_preds = torch.sum(train_stacked_preds, dim=0)
@@ -83,7 +86,7 @@ class Trainer:
 
         train_accuracy = train_correct / len(self.train_dataset)
 
-        return train_loss, train_accuracy
+        return train_loss, train_accuracy, epoch_losses
 
     def early_stopping(self, avg_metric):
         if avg_metric > self.best_avg_metric:
@@ -98,26 +101,52 @@ class Trainer:
             return True
         return False
 
+    def plot_loss(self, loss, epoch, title= None, figsize=(10,5)):
+        fig, ax = plt.subplots(figsize=figsize)
+        ax.plot(loss)
+        ax.set_title(title)
+        ax.set_ylabel('Loss')
+        ax.set_xlabel(f'epoch: {epoch}')
+        ax.grid()
+
     def train(self):
         self.train_losses = []
         self.train_accuracies = []
         self.val_losses = []
         self.val_accuracies = []
+        all_train_losses = [] # for plotting
+        val_avg_metrics = [] # for plotting
 
         for epoch in range(self.num_epochs):
             print(f"Epoch {epoch+1}/{self.num_epochs}")
-            train_loss, train_accuracy = self.train_one_epoch()
+            train_loss, train_accuracy, epoch_losses = self.train_one_epoch()
             self.train_losses.append(train_loss)
             self.train_accuracies.append(train_accuracy)
+            
+            all_train_losses.extend(epoch_losses) # for plotting purpose
+
             print(f"Train Loss: {train_loss:.4f}, Train Accuracy: {train_accuracy:.4f}")
 
             val_loss, val_accuracy, precision, recall, auc, avg_metric, conf_matrix = self.tester.test(phase="Val")
             self.val_losses.append(val_loss)
             self.val_accuracies.append(val_accuracy)
 
+            val_avg_metrics.append(avg_metric) # for plotting purpose
+
+            if epoch == self.num_epochs - 1:
+                self.plot_loss(epoch_losses, epoch, title='train loss')
+                self.plot_loss(val_avg_metrics, epoch, title='valication dice')
+
             if self.early_stopping(avg_metric):
+
+                self.plot_loss(epoch_losses, epoch, title='train loss')
+                self.plot_loss(val_avg_metrics, epoch, title='valication dice')
                 break
 
+            
+            
+
+   
 
 # class Trainer:
 
