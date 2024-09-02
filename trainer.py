@@ -6,7 +6,7 @@ from sklearn.metrics import precision_score, recall_score, roc_auc_score, confus
 from torch.nn.functional import sigmoid
 from collections import Counter
 from tqdm import tqdm
-from tester import Tester
+from tester import Tester, Tester_AutoencoderClassification
 import matplotlib.pyplot as plt
 
 
@@ -144,9 +144,144 @@ class Trainer:
                 break
 
             
-            
+'''
+Trainer_AutoencoderClassification
 
-   
+two loss functions in the model
+so handling loss funcion has changed a bit 
+'''
+
+class Trainer_AutoencoderClassification:
+
+    def __init__(self, model, criterion, optimizer, train_dl, val_dl, train_dataset, val_dataset, device, num_epochs, patience, threshold, save_path):
+        self.model = model
+        self.criterion = criterion
+        self.optimizer = optimizer
+        self.train_dl = train_dl
+        self.val_dl = val_dl
+        self.train_dataset = train_dataset
+        self.val_dataset = val_dataset
+        self.device = device
+        self.num_epochs = num_epochs
+        self.patience = patience
+        self.threshold = threshold
+        self.best_avg_metric = 0
+        self.epochs_no_improve = 0
+        self.save_path = save_path
+
+        # Initialize the Tester instance
+        self.tester = Tester_AutoencoderClassification(
+            model=self.model,
+            criterion=self.criterion,
+            test_dl=self.val_dl,
+            test_dataset=self.val_dataset,
+            device=self.device,
+            threshold=self.threshold
+        )
+
+    def train_one_epoch(self):
+        self.model.train()
+        train_loss = 0.0
+        train_correct = 0.0
+        epoch_losses = [] # for plotting purpose
+
+        for images, label in tqdm(self.train_dl):
+            images = images.float().to(device=self.device)
+            label = label.float().to(device=self.device)
+
+            patient_outputs = []
+            for i in range(images.size(1)):
+                input = images[:, i, :, :]  
+                input = input.unsqueeze(1)  
+
+                # forward pass
+                reconstructed, outputs = self.model(input) # two outputs for AutoencoderClassification model
+
+                outputs = outputs.logits if hasattr(outputs, 'logits') else outputs
+                
+                # compute losses
+                loss_reconstruction = self.criterion[0](reconstructed, input)
+                loss_classification = self.criterion[1](outputs, label.unsqueeze(1))
+                loss = loss_reconstruction + loss_classification
+
+                patient_outputs.append(outputs)
+
+                # backward and optimizer
+                self.optimizer.zero_grad()
+                loss.backward()
+                self.optimizer.step()
+
+                train_loss += loss.item()
+
+                epoch_losses.append(loss.item()) # for plotting purpose
+
+            train_preds = [(sigmoid(x) > self.threshold).float() for x in patient_outputs]
+            train_stacked_preds = torch.stack(train_preds)
+            train_sum_preds = torch.sum(train_stacked_preds, dim=0)
+            train_max_vot = (train_sum_preds > (len(train_preds) / 2)).float()
+            train_correct += (train_max_vot == label.unsqueeze(1)).sum().item()
+
+        train_accuracy = train_correct / len(self.train_dataset)
+
+        return train_loss, train_accuracy, epoch_losses
+
+    def early_stopping(self, avg_metric):
+        if avg_metric > self.best_avg_metric:
+            self.best_avg_metric = avg_metric
+            self.epochs_no_improve = 0
+            torch.save(self.model.state_dict(), self.save_path)
+        else:
+            self.epochs_no_improve += 1
+
+        if self.epochs_no_improve >= self.patience:
+            print("Early stopping triggered")
+            return True
+        return False
+
+    def plot_loss(self, loss, epoch, title= None, figsize=(10,5)):
+        fig, ax = plt.subplots(figsize=figsize)
+        ax.plot(loss)
+        ax.set_title(title)
+        ax.set_ylabel('Loss')
+        ax.set_xlabel(f'epoch: {epoch}')
+        ax.grid()
+
+    def train(self):
+        self.train_losses = []
+        self.train_accuracies = []
+        self.val_losses = []
+        self.val_accuracies = []
+        all_train_losses = [] # for plotting
+        val_avg_metrics = [] # for plotting
+
+        for epoch in range(self.num_epochs):
+            print(f"Epoch {epoch+1}/{self.num_epochs}")
+            train_loss, train_accuracy, epoch_losses = self.train_one_epoch()
+            self.train_losses.append(train_loss)
+            self.train_accuracies.append(train_accuracy)
+            
+            all_train_losses.extend(epoch_losses) # for plotting purpose
+
+            print(f"Train Loss: {train_loss:.4f}, Train Accuracy: {train_accuracy:.4f}")
+
+            val_loss, val_accuracy, precision, recall, auc, avg_metric, conf_matrix = self.tester.test(phase="Val")
+            self.val_losses.append(val_loss)
+            self.val_accuracies.append(val_accuracy)
+
+            val_avg_metrics.append(avg_metric) # for plotting purpose
+
+            if epoch == self.num_epochs - 1:
+                self.plot_loss(epoch_losses, epoch, title='train loss')
+                self.plot_loss(val_avg_metrics, epoch, title='valication dice')
+
+            if self.early_stopping(avg_metric):
+
+                self.plot_loss(epoch_losses, epoch, title='train loss')
+                self.plot_loss(val_avg_metrics, epoch, title='valication dice')
+                break
+
+
+            
 
 # class Trainer:
 

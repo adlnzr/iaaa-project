@@ -87,6 +87,81 @@ class Tester:
             return test_loss, test_accuracy, precision, recall, auc, avg_metric, conf_matrix
 
 
+class Tester_AutoencoderClassification:
+    def __init__(self, model, criterion, test_dl, test_dataset, device, threshold=0.5):
+        self.model = model
+        self.criterion = criterion
+        self.test_dl = test_dl
+        self.test_dataset = test_dataset
+        self.device = device
+        self.threshold = threshold
+
+
+    @torch.no_grad()
+    def test(self, phase="Test"):
+        self.model.eval()
+        test_correct = 0.0
+        test_loss = 0.0
+        all_labels = []
+        all_preds = []
+
+        for images, label in self.test_dl:
+            images = images.float().to(device=self.device)
+            label = label.float().to(device=self.device)
+
+            output_list = []
+            for i in range(images.size(1)):
+                input = images[:, i, :, :]
+                input = input.unsqueeze(1)
+
+                # forward pass
+                reconstructed, model_predict = self.model(input)
+                
+                model_predict = model_predict.logits if hasattr(model_predict, 'logits') else model_predict
+                # compute losses
+                loss_reconstruction = self.criterion[0](reconstructed, input)
+                loss_classification = self.criterion[1](model_predict, label.unsqueeze(1))
+                loss = loss_reconstruction + loss_classification
+
+                output_list.append(model_predict)
+                test_loss += loss.item()
+
+            # as long as sigmoid has been applied to the model_predict in the model
+            # no need any further sigmoid 
+            test_preds = [(x > self.threshold).float() for x in output_list]  # len=20
+            stacked_preds = torch.stack(test_preds)
+            sum_preds = torch.sum(stacked_preds, dim=0)
+            test_max_vot = (sum_preds > (len(test_preds) / 2)).float()  # tensor of shape [32, 1]
+            test_correct += (test_max_vot == label.unsqueeze(1)).sum().item()
+
+            all_labels.extend(label.cpu().numpy())
+            all_preds.extend(test_max_vot.squeeze(1).cpu().numpy())
+
+        test_accuracy = test_correct / len(self.test_dataset)
+        all_labels = np.array(all_labels)
+        all_preds = np.array(all_preds)
+
+        if np.sum(all_preds) == 0:
+            precision = 0.0
+            recall = 0.0
+        else:
+            precision = precision_score(all_labels, all_preds)
+            recall = recall_score(all_labels, all_preds)
+
+        auc = roc_auc_score(all_labels, all_preds)
+        avg_metric = (precision + recall + test_accuracy) / 3
+        conf_matrix = confusion_matrix(all_labels, all_preds)
+
+        print(f"{phase} Loss: {test_loss:.4f}, {phase} Accuracy: {test_accuracy:.4f}")
+        print(f"Precision: {precision:.4f}, Recall: {recall:.4f}, AUC: {auc:.4f}, Avg Metric: {avg_metric:.4f}")
+
+        # Print confusion matrix
+        print("Confusion Matrix:")
+        print(conf_matrix)
+
+        if phase == "Val":
+            return test_loss, test_accuracy, precision, recall, auc, avg_metric, conf_matrix
+
 # class Tester:
 #     def __init__(self, model, test_dl, test_dataset, device, threshold):
 #         self.model = model
