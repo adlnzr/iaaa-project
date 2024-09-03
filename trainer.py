@@ -232,13 +232,13 @@ class Trainer_AutoencoderClassification:
 
         for epoch in range(self.num_epochs):
             print(f"Epoch {epoch+1}/{self.num_epochs}")
-            train_loss, train_accuracy, epoch_losses = self.train_one_epoch()
+            train_loss, train_accuracy = self.train_one_epoch()
             self.train_losses.append(train_loss)
             self.train_accuracies.append(train_accuracy)
 
             print(f"Train Loss: {train_loss:.4f}, Train Accuracy: {train_accuracy:.4f}")
 
-            val_loss, val_accuracy, precision, recall, auc, avg_metric, conf_matrix, all_test_losses = self.tester.test(phase="Val")
+            val_loss, val_accuracy, precision, recall, auc, avg_metric, conf_matrix = self.tester.test(phase="Val")
             self.val_losses.append(val_loss)
             self.val_accuracies.append(val_accuracy)
 
