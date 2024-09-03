@@ -33,12 +33,13 @@ class Tester:
         test_loss = 0.0
         all_labels = []
         all_preds = []
-
+        
         for images, label in self.test_dl:
             images = images.float().to(device=self.device)
             label = label.float().to(device=self.device)
 
             output_list = []
+
             for i in range(images.size(1)):
                 input = images[:, i, :, :]
                 input = input.unsqueeze(1)
@@ -51,15 +52,17 @@ class Tester:
                 output_list.append(output)
                 test_loss += loss.item()
 
-            # Applying sigmoid and thresholding to each output in the list
-            test_preds = [(sigmoid(x) > self.threshold).float() for x in output_list]  # len=20
+            # applying sigmoid to each output in the list
+            test_preds = [sigmoid(x) for x in output_list]  # len=20
             stacked_preds = torch.stack(test_preds)
-            sum_preds = torch.sum(stacked_preds, dim=0)
-            test_max_vot = (sum_preds > (len(test_preds) / 2)).float()  # tensor of shape [32, 1]
-            test_correct += (test_max_vot == label.unsqueeze(1)).sum().item()
+            mean_preds = torch.mean(stacked_preds, dim=0)
+
+            # each patient result based on mean predictions compared to the threshold
+            test_result = (mean_preds > self.threshold).float()  # tensor of shape [32, 1]
+            test_correct += (test_result == label.unsqueeze(1)).sum().item()
 
             all_labels.extend(label.cpu().numpy())
-            all_preds.extend(test_max_vot.squeeze(1).cpu().numpy())
+            all_preds.extend(test_result.squeeze(1).cpu().numpy())
 
         test_accuracy = test_correct / len(self.test_dataset)
         all_labels = np.array(all_labels)
@@ -73,7 +76,7 @@ class Tester:
             recall = recall_score(all_labels, all_preds)
 
         auc = roc_auc_score(all_labels, all_preds)
-        avg_metric = (precision + recall + test_accuracy) / 3
+        avg_metric = (precision + recall) / 2
         conf_matrix = confusion_matrix(all_labels, all_preds)
 
         print(f"{phase} Loss: {test_loss:.4f}, {phase} Accuracy: {test_accuracy:.4f}")
@@ -110,6 +113,7 @@ class Tester_AutoencoderClassification:
             label = label.float().to(device=self.device)
 
             output_list = []
+
             for i in range(images.size(1)):
                 input = images[:, i, :, :]
                 input = input.unsqueeze(1)
@@ -128,14 +132,14 @@ class Tester_AutoencoderClassification:
 
             # as long as sigmoid has been applied to the model_predict in the model
             # no need any further sigmoid 
-            test_preds = [(x > self.threshold).float() for x in output_list]  # len=20
+            test_preds = [x for x in output_list]  # len=20
             stacked_preds = torch.stack(test_preds)
-            sum_preds = torch.sum(stacked_preds, dim=0)
-            test_max_vot = (sum_preds > (len(test_preds) / 2)).float()  # tensor of shape [32, 1]
-            test_correct += (test_max_vot == label.unsqueeze(1)).sum().item()
+            mean_preds = torch.mean(stacked_preds, dim=0)
+            test_result = (mean_preds > self.threshold).float()  # tensor of shape [32, 1]
+            test_correct += (test_result == label.unsqueeze(1)).sum().item()
 
             all_labels.extend(label.cpu().numpy())
-            all_preds.extend(test_max_vot.squeeze(1).cpu().numpy())
+            all_preds.extend(test_result.squeeze(1).cpu().numpy())
 
         test_accuracy = test_correct / len(self.test_dataset)
         all_labels = np.array(all_labels)
@@ -149,7 +153,7 @@ class Tester_AutoencoderClassification:
             recall = recall_score(all_labels, all_preds)
 
         auc = roc_auc_score(all_labels, all_preds)
-        avg_metric = (precision + recall + test_accuracy) / 3
+        avg_metric = (precision + recall ) / 2
         conf_matrix = confusion_matrix(all_labels, all_preds)
 
         print(f"{phase} Loss: {test_loss:.4f}, {phase} Accuracy: {test_accuracy:.4f}")

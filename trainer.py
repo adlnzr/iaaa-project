@@ -8,6 +8,7 @@ from collections import Counter
 from tqdm import tqdm
 from tester import Tester, Tester_AutoencoderClassification
 import matplotlib.pyplot as plt
+from torch.utils.tensorboard import SummaryWriter
 
 
 '''
@@ -47,11 +48,13 @@ class Trainer:
             threshold=self.threshold
         )
 
+        # initialize TensorBoard SummaryWriter
+        self.writer = SummaryWriter(log_dir="runs/training")
+
     def train_one_epoch(self):
         self.model.train()
         train_loss = 0.0
         train_correct = 0.0
-        epoch_losses = [] # for plotting purpose
 
         for images, label in tqdm(self.train_dl):
             images = images.float().to(device=self.device)
@@ -76,17 +79,15 @@ class Trainer:
 
                 train_loss += loss.item()
 
-                epoch_losses.append(loss.item()) # for plotting purpose
-
-            train_preds = [(sigmoid(x) > self.threshold).float() for x in patient_outputs]
+            train_preds = [sigmoid(x) for x in patient_outputs]
             train_stacked_preds = torch.stack(train_preds)
-            train_sum_preds = torch.sum(train_stacked_preds, dim=0)
-            train_max_vot = (train_sum_preds > (len(train_preds) / 2)).float()
-            train_correct += (train_max_vot == label.unsqueeze(1)).sum().item()
+            train_mean_preds = torch.mean(train_stacked_preds, dim=0)
+            train_result = (train_mean_preds > self.threshold).float()
+            train_correct += (train_result == label.unsqueeze(1)).sum().item()
 
         train_accuracy = train_correct / len(self.train_dataset)
 
-        return train_loss, train_accuracy, epoch_losses
+        return train_loss, train_accuracy
 
     def early_stopping(self, avg_metric):
         if avg_metric > self.best_avg_metric:
@@ -101,48 +102,33 @@ class Trainer:
             return True
         return False
 
-    def plot_loss(self, loss, epoch, title= None, figsize=(10,5)):
-        fig, ax = plt.subplots(figsize=figsize)
-        ax.plot(loss)
-        ax.set_title(title)
-        ax.set_ylabel('Loss')
-        ax.set_xlabel(f'epoch: {epoch}')
-        ax.grid()
-
     def train(self):
         self.train_losses = []
         self.train_accuracies = []
         self.val_losses = []
         self.val_accuracies = []
-        all_train_losses = [] # for plotting
-        val_avg_metrics = [] # for plotting
 
         for epoch in range(self.num_epochs):
             print(f"Epoch {epoch+1}/{self.num_epochs}")
-            train_loss, train_accuracy, epoch_losses = self.train_one_epoch()
+            train_loss, train_accuracy = self.train_one_epoch()
             self.train_losses.append(train_loss)
             self.train_accuracies.append(train_accuracy)
-            
-            all_train_losses.extend(epoch_losses) # for plotting purpose
 
             print(f"Train Loss: {train_loss:.4f}, Train Accuracy: {train_accuracy:.4f}")
 
             val_loss, val_accuracy, precision, recall, auc, avg_metric, conf_matrix = self.tester.test(phase="Val")
+
             self.val_losses.append(val_loss)
             self.val_accuracies.append(val_accuracy)
 
-            val_avg_metrics.append(avg_metric) # for plotting purpose
+            # Log the losses and metrics to TensorBoard
+            self.writer.add_scalar('Loss/Train', train_loss, epoch)
+            self.writer.add_scalar('Loss/Val', val_loss, epoch)
+            self.writer.add_scalar('Accuracy/Train', train_accuracy, epoch)
+            self.writer.add_scalar('Accuracy/Val', val_accuracy, epoch)
+            self.writer.add_scalar('Val/Average Metric', avg_metric, epoch)
 
-            if epoch == self.num_epochs - 1:
-                self.plot_loss(epoch_losses, epoch, title='train loss')
-                self.plot_loss(val_avg_metrics, epoch, title='valication dice')
-
-            if self.early_stopping(avg_metric):
-
-                self.plot_loss(epoch_losses, epoch, title='train loss')
-                self.plot_loss(val_avg_metrics, epoch, title='valication dice')
-                break
-
+        self.writer.close()
             
 '''
 Trainer_AutoencoderClassification
@@ -179,11 +165,13 @@ class Trainer_AutoencoderClassification:
             threshold=self.threshold
         )
 
+        # initialize TensorBoard SummaryWriter
+        self.writer = SummaryWriter(log_dir="runs/training")
+
     def train_one_epoch(self):
         self.model.train()
         train_loss = 0.0
         train_correct = 0.0
-        epoch_losses = [] # for plotting purpose
 
         for images, label in tqdm(self.train_dl):
             images = images.float().to(device=self.device)
@@ -213,17 +201,15 @@ class Trainer_AutoencoderClassification:
 
                 train_loss += loss.item()
 
-                epoch_losses.append(loss.item()) # for plotting purpose
-
-            train_preds = [(sigmoid(x) > self.threshold).float() for x in patient_outputs]
+            train_preds = [sigmoid(x) for x in patient_outputs]
             train_stacked_preds = torch.stack(train_preds)
-            train_sum_preds = torch.sum(train_stacked_preds, dim=0)
-            train_max_vot = (train_sum_preds > (len(train_preds) / 2)).float()
-            train_correct += (train_max_vot == label.unsqueeze(1)).sum().item()
+            train_mean_preds = torch.sum(train_stacked_preds, dim=0)
+            train_result = (train_mean_preds > self.threshold).float()
+            train_correct += (train_result == label.unsqueeze(1)).sum().item()
 
         train_accuracy = train_correct / len(self.train_dataset)
 
-        return train_loss, train_accuracy, epoch_losses
+        return train_loss, train_accuracy
 
     def early_stopping(self, avg_metric):
         if avg_metric > self.best_avg_metric:
@@ -238,48 +224,32 @@ class Trainer_AutoencoderClassification:
             return True
         return False
 
-    def plot_loss(self, loss, epoch, title= None, figsize=(10,5)):
-        fig, ax = plt.subplots(figsize=figsize)
-        ax.plot(loss)
-        ax.set_title(title)
-        ax.set_ylabel('Loss')
-        ax.set_xlabel(f'epoch: {epoch}')
-        ax.grid()
-
     def train(self):
         self.train_losses = []
         self.train_accuracies = []
         self.val_losses = []
         self.val_accuracies = []
-        all_train_losses = [] # for plotting
-        val_avg_metrics = [] # for plotting
 
         for epoch in range(self.num_epochs):
             print(f"Epoch {epoch+1}/{self.num_epochs}")
             train_loss, train_accuracy, epoch_losses = self.train_one_epoch()
             self.train_losses.append(train_loss)
             self.train_accuracies.append(train_accuracy)
-            
-            all_train_losses.extend(epoch_losses) # for plotting purpose
 
             print(f"Train Loss: {train_loss:.4f}, Train Accuracy: {train_accuracy:.4f}")
 
-            val_loss, val_accuracy, precision, recall, auc, avg_metric, conf_matrix = self.tester.test(phase="Val")
+            val_loss, val_accuracy, precision, recall, auc, avg_metric, conf_matrix, all_test_losses = self.tester.test(phase="Val")
             self.val_losses.append(val_loss)
             self.val_accuracies.append(val_accuracy)
 
-            val_avg_metrics.append(avg_metric) # for plotting purpose
-
-            if epoch == self.num_epochs - 1:
-                self.plot_loss(epoch_losses, epoch, title='train loss')
-                self.plot_loss(val_avg_metrics, epoch, title='valication dice')
-
-            if self.early_stopping(avg_metric):
-
-                self.plot_loss(epoch_losses, epoch, title='train loss')
-                self.plot_loss(val_avg_metrics, epoch, title='valication dice')
-                break
-
+            # Log the losses and metrics to TensorBoard
+            self.writer.add_scalar('Loss/Train', train_loss, epoch)
+            self.writer.add_scalar('Loss/Val', val_loss, epoch)
+            self.writer.add_scalar('Accuracy/Train', train_accuracy, epoch)
+            self.writer.add_scalar('Accuracy/Val', val_accuracy, epoch)
+            self.writer.add_scalar('Val/Average Metric', avg_metric, epoch)
+            
+        self.writer.close()
 
             
 
