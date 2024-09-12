@@ -49,7 +49,7 @@ class Trainer:
         )
 
         # initialize TensorBoard SummaryWriter
-        self.writer = SummaryWriter(log_dir="runs/training")
+        self.writer = SummaryWriter(log_dir=f"runs/training/{self.model.__class__.__name__}")
 
     def train_one_epoch(self):
         self.model.train()
@@ -93,7 +93,7 @@ class Trainer:
         if avg_metric > self.best_avg_metric:
             self.best_avg_metric = avg_metric
             self.epochs_no_improve = 0
-            torch.save(self.model.state_dict(), self.save_path)
+            torch.save(self.model.state_dict(), f"saved_models/{self.model.__class__.__name__}_best.pth")
         else:
             self.epochs_no_improve += 1
 
@@ -116,17 +116,50 @@ class Trainer:
 
             print(f"Train Loss: {train_loss:.4f}, Train Accuracy: {train_accuracy:.4f}")
 
-            val_loss, val_accuracy, precision, recall, auc, avg_metric, conf_matrix = self.tester.test(phase="Val")
+            val_loss, val_accuracy, val_precision, val_recall, val_f1, val_auc, val_avgmetric, conf_matrix = self.tester.test(phase="Val")
 
             self.val_losses.append(val_loss)
             self.val_accuracies.append(val_accuracy)
 
             # Log the losses and metrics to TensorBoard
-            self.writer.add_scalar('Loss/Train', train_loss, epoch)
-            self.writer.add_scalar('Loss/Val', val_loss, epoch)
-            self.writer.add_scalar('Accuracy/Train', train_accuracy, epoch)
-            self.writer.add_scalar('Accuracy/Val', val_accuracy, epoch)
-            self.writer.add_scalar('Val/Average Metric', avg_metric, epoch)
+            self.writer.add_scalars('Loss', {
+            'Train': train_loss,
+            'Validation': val_loss
+            }, epoch)
+
+            self.writer.add_scalars('Accuracy', {
+            'Train': train_accuracy,
+            'Validation': val_accuracy
+            }, epoch)
+        
+            self.writer.add_scalars('F1', {
+            #    'Train': train_f1,
+                'Validation': val_f1
+            }, epoch)
+            
+            self.writer.add_scalars('Precision', {
+            #    'Train': train_precision,
+                'Validation': val_precision
+            }, epoch)
+            
+            self.writer.add_scalars('Recall', {
+            #    'Train': train_recall,
+                'Validation': val_recall
+            }, epoch)
+
+            self.writer.add_scalars('avg_metric', {
+            #    'Train': train_avgmetric,
+                'Validation': val_avgmetric
+            }, epoch)
+
+            self.writer.add_scalars('auc', {
+            #    'Train': train_auc,
+                'Validation': val_auc
+            }, epoch)
+            
+
+            if self.early_stopping():
+                    break
 
         self.writer.close()
             
@@ -166,7 +199,7 @@ class Trainer_AutoencoderClassification:
         )
 
         # initialize TensorBoard SummaryWriter
-        self.writer = SummaryWriter(log_dir="runs/training")
+        self.writer = SummaryWriter(log_dir=f"runs/training/{self.model.__class__.__name__}")
 
     def train_one_epoch(self):
         self.model.train()
@@ -238,17 +271,51 @@ class Trainer_AutoencoderClassification:
 
             print(f"Train Loss: {train_loss:.4f}, Train Accuracy: {train_accuracy:.4f}")
 
-            val_loss, val_accuracy, precision, recall, auc, avg_metric, conf_matrix = self.tester.test(phase="Val")
+            val_loss, val_accuracy, val_precision, val_recall, val_f1, val_auc, val_avgmetric, conf_matrix = self.tester.test(phase="Val")
             self.val_losses.append(val_loss)
             self.val_accuracies.append(val_accuracy)
 
             # Log the losses and metrics to TensorBoard
-            self.writer.add_scalar('Loss/Train', train_loss, epoch)
-            self.writer.add_scalar('Loss/Val', val_loss, epoch)
-            self.writer.add_scalar('Accuracy/Train', train_accuracy, epoch)
-            self.writer.add_scalar('Accuracy/Val', val_accuracy, epoch)
-            self.writer.add_scalar('Val/Average Metric', avg_metric, epoch)
+
+            self.writer.add_scalars('Loss', {
+            'Train': train_loss,
+            'Validation': val_loss
+            }, epoch)
+
+            self.writer.add_scalars('Accuracy', {
+            'Train': train_accuracy,
+            'Validation': val_accuracy
+            }, epoch)
+        
+            self.writer.add_scalars('F1', {
+            #    'Train': train_f1,
+                'Validation': val_f1
+            }, epoch)
             
+            self.writer.add_scalars('Precision', {
+            #    'Train': train_precision,
+                'Validation': val_precision
+            }, epoch)
+            
+            self.writer.add_scalars('Recall', {
+            #    'Train': train_recall,
+                'Validation': val_recall
+            }, epoch)
+
+            self.writer.add_scalars('avg_metric', {
+            #    'Train': train_avgmetric,
+                'Validation': val_avgmetric
+            }, epoch)
+
+            self.writer.add_scalars('auc', {
+            #    'Train': train_auc,
+                'Validation': val_auc
+            }, epoch)
+            
+
+            if self.early_stopping():
+                    break
+
         self.writer.close()
 
             

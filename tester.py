@@ -11,7 +11,7 @@ class Tester:
 
 import numpy as np
 import torch
-from sklearn.metrics import precision_score, recall_score, roc_auc_score, confusion_matrix
+from sklearn.metrics import precision_score, recall_score, f1_score, roc_auc_score, confusion_matrix
 from torch.nn.functional import sigmoid
 from collections import Counter
 
@@ -71,9 +71,11 @@ class Tester:
         if np.sum(all_preds) == 0:
             precision = 0.0
             recall = 0.0
+            f1 = 0.0
         else:
             precision = precision_score(all_labels, all_preds)
             recall = recall_score(all_labels, all_preds)
+            f1 = f1_score(all_labels, all_preds)
 
         auc = roc_auc_score(all_labels, all_preds)
         avg_metric = (precision + recall) / 2
@@ -87,7 +89,7 @@ class Tester:
         print(conf_matrix)
 
         if phase == "Val":
-            return test_loss, test_accuracy, precision, recall, auc, avg_metric, conf_matrix
+            return test_loss, test_accuracy, precision, recall, f1, auc, avg_metric, conf_matrix
 
 
 class Tester_AutoencoderClassification:
@@ -148,12 +150,14 @@ class Tester_AutoencoderClassification:
         if np.sum(all_preds) == 0:
             precision = 0.0
             recall = 0.0
+            f1 = 0.0
         else:
             precision = precision_score(all_labels, all_preds)
             recall = recall_score(all_labels, all_preds)
+            f1 = f1_score(all_labels, all_preds)
 
         auc = roc_auc_score(all_labels, all_preds)
-        avg_metric = (precision + recall ) / 2
+        avg_metric = (precision + recall) / 2
         conf_matrix = confusion_matrix(all_labels, all_preds)
 
         print(f"{phase} Loss: {test_loss:.4f}, {phase} Accuracy: {test_accuracy:.4f}")
@@ -164,7 +168,7 @@ class Tester_AutoencoderClassification:
         print(conf_matrix)
 
         if phase == "Val":
-            return test_loss, test_accuracy, precision, recall, auc, avg_metric, conf_matrix
+            return test_loss, test_accuracy, precision, recall, f1, auc, avg_metric, conf_matrix
 
 # class Tester:
 #     def __init__(self, model, test_dl, test_dataset, device, threshold):
