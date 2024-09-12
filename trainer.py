@@ -158,7 +158,7 @@ class Trainer:
             }, epoch)
             
 
-            if self.early_stopping():
+            if self.early_stopping(val_avgmetric):
                     break
 
         self.writer.close()
@@ -184,7 +184,7 @@ class Trainer_AutoencoderClassification:
         self.num_epochs = num_epochs
         self.patience = patience
         self.threshold = threshold
-        self.best_avg_metric = 0
+        self.best_val_avgmetric = 0
         self.epochs_no_improve = 0
         self.save_path = save_path
 
@@ -244,11 +244,11 @@ class Trainer_AutoencoderClassification:
 
         return train_loss, train_accuracy
 
-    def early_stopping(self, avg_metric):
-        if avg_metric > self.best_avg_metric:
-            self.best_avg_metric = avg_metric
+    def early_stopping(self, val_avgmetric):
+        if val_avgmetric > self.best_val_avgmetric:
+            self.best_val_avgmetric = val_avgmetric
             self.epochs_no_improve = 0
-            torch.save(self.model.state_dict(), self.save_path)
+            torch.save(self.model.state_dict(), f"saved_models/{self.model.__class__.__name__}_best.pth")
         else:
             self.epochs_no_improve += 1
 
@@ -313,7 +313,7 @@ class Trainer_AutoencoderClassification:
             }, epoch)
             
 
-            if self.early_stopping():
+            if self.early_stopping(val_avgmetric):
                     break
 
         self.writer.close()

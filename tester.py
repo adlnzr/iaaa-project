@@ -78,7 +78,7 @@ class Tester:
             f1 = f1_score(all_labels, all_preds)
 
         auc = roc_auc_score(all_labels, all_preds)
-        avg_metric = (precision + recall) / 2
+        avg_metric = (precision + recall + auc) / 3
         conf_matrix = confusion_matrix(all_labels, all_preds)
 
         print(f"{phase} Loss: {test_loss:.4f}, {phase} Accuracy: {test_accuracy:.4f}")
@@ -157,7 +157,7 @@ class Tester_AutoencoderClassification:
             f1 = f1_score(all_labels, all_preds)
 
         auc = roc_auc_score(all_labels, all_preds)
-        avg_metric = (precision + recall) / 2
+        avg_metric = (precision + recall + auc) / 3
         conf_matrix = confusion_matrix(all_labels, all_preds)
 
         print(f"{phase} Loss: {test_loss:.4f}, {phase} Accuracy: {test_accuracy:.4f}")
