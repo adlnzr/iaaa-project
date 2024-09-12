@@ -19,7 +19,7 @@ from torchvision import transforms
 
 from config import Config, Device
 from datasets import InferenceDataset
-from models import InceptionV3
+from models import ResnextViT
 from inference import inference
 
 
@@ -62,12 +62,13 @@ def main(data_dir: Path, predictions_file_path: Path):
 
     inference_dl = DataLoader(inference_dataset, batch_size=32)
 
-    model = InceptionV3().to(device=device)
+    model = ResnextViT(pretrained=False).to(device)
 
     model_name = model.__class__.__name__
 
     model.load_state_dict(torch.load(
-        f"saved_models/{model_name}.pth", weights_only=True))
+        f"saved_models/{model_name}.pth", map_location=torch.device(device=device)))
+
 
     predictions = inference(model, inference_dl, device)
 

@@ -5,3 +5,5 @@ from models.unet import UNet
 from models.mri_resnet import MriResentModel
 from models.cnn import CNN
 from models.darknet53 import darknet53
+from models.resnext_vit import ResnextViT
+from models.unet_resnet import UNetResnet

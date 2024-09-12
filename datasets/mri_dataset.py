@@ -9,19 +9,14 @@ import pydicom
 from PIL import Image
 from torch.utils.data import Dataset
 
-class MRIDataset(Dataset):  # no augmentation / original unbalanced data
 
-    '''
-    output -> image , label 
-    image: extracted from pydicom file of each patient and then transformed
-    output image dimension: [1,h,w]
-    '''
-
-    def __init__(self, data_path, labels_path, split="train", transform=None, random_state=42):
+class MRIDataset(Dataset):
+    def __init__(self, data_path, labels_path, split="train", transform=None, max_slices=None, random_state=42):
         super().__init__()
         self.data_path = data_path
         self.labels_path = labels_path
         self.transform = transform
+        self.max_slices = max_slices
 
         self.labels = pd.read_csv(labels_path)
 
@@ -53,21 +48,22 @@ class MRIDataset(Dataset):  # no augmentation / original unbalanced data
 
     def __getitem__(self, idx):
         patient_id = self.patient_list[idx]
-        image = self.load_patient_images(patient_id)
+        images = self.load_patient_images(patient_id)
 
         # data needs to be "array"/"PIL image" to be applied by transforms
-        image = [Image.fromarray(image, mode= 'L') if isinstance(image, np.ndarray) else image]
-                
-        if self.transform:
-            image = self.transform(image)
-        else:
-            images = torch.tensor(image, dtype=torch.float32)
+        images = [Image.fromarray(image, mode='L') if isinstance(
+            image, np.ndarray) else image for image in images]
 
-        # dimension: [h,w]? to be checked
-        images = image.unsqueeze(0)  # [1,h,w] adding the channel dimension
+        if self.transform:
+            images = [self.transform(image) for image in images]
+        else:
+            images = [torch.tensor(img, dtype=torch.float32) for img in images]
+
+        images = torch.stack(images)
+        images = images.squeeze(1)  # remove the channel dimension
 
         label = self.labels[self.labels['SeriesInstanceUID']
-                            == patient_id]['prediction'].values
+                            == patient_id]['prediction'].values[0]
         label = torch.tensor(label, dtype=torch.long)
 
         return images, label
@@ -77,9 +73,18 @@ class MRIDataset(Dataset):  # no augmentation / original unbalanced data
         dcm_paths = [os.path.join(patient_dir, f) for f in os.listdir(
             patient_dir) if f.endswith('.dcm')]
 
+        images = []
         for dcm_path in dcm_paths:
             dcm_data = pydicom.dcmread(dcm_path)
             image_array = dcm_data.pixel_array
-            # image_array = image_array / \
-            #     np.max(image_array)  # normalize the image
-            return image_array
+            # image_array = image_array / np.max(image_array)  # normalize the image
+            images.append(image_array)
+
+        # pad the images to max_slices
+        if self.max_slices:
+            padding_needed = self.max_slices - len(images)
+            if padding_needed > 0:
+                extra_slices = random.choices(images, k=padding_needed)
+                images.extend(extra_slices)
+
+        return images

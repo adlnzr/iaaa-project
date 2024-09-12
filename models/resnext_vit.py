@@ -1,15 +1,15 @@
 import torch
-from transformers import ViTModel
+from transformers import ViTModel, ViTConfig
 from torchvision import models
 from torch import nn
 
 
 class ResnextViT(nn.Module):
-    def __init__(self, vit_model_name='google/vit-base-patch16-224-in21k', num_classes=1):
+    def __init__(self, vit_model_name='google/vit-base-patch16-224-in21k', num_classes=1, pretrained=True):
         super(ResnextViT, self).__init__()
 
         # Load a pre-trained ResNeXt model and remove the final FC layer and pooling
-        self.resnext = models.resnext50_32x4d(pretrained=True)
+        self.resnext = models.resnext50_32x4d(pretrained=pretrained)
 
         # Modify the first convolutional layer to accept 1 channel instead of 3
         self.resnext.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
@@ -20,9 +20,13 @@ class ResnextViT(nn.Module):
         # Remove final FC layer and pooling
         self.resnext = nn.Sequential(*list(self.resnext.children())[:-2])  
 
+        if pretrained:
         # Load a pre-trained ViT model
-        self.vit = ViTModel.from_pretrained(vit_model_name)
-        
+            self.vit = ViTModel.from_pretrained(vit_model_name)
+        else:
+            config = ViTConfig()
+            self.vit = ViTModel(config)
+
         # Project ResNeXt features from 2048 to 768 for ViT
         self.feature_projection = nn.Linear(2048, self.vit.config.hidden_size)  
         
