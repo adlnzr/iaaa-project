@@ -6,9 +6,10 @@ from sklearn.metrics import precision_score, recall_score, roc_auc_score, confus
 from torch.nn.functional import sigmoid
 from collections import Counter
 from tqdm import tqdm
-from tester import Tester, Tester_AutoencoderClassification
+from tester import Tester, Tester_AutoencoderClassification, Tester_ViT_smalldata
 import matplotlib.pyplot as plt
 from torch.utils.tensorboard import SummaryWriter
+from torch.amp import GradScaler, autocast
 
 
 '''
@@ -318,6 +319,159 @@ class Trainer_AutoencoderClassification:
 
         self.writer.close()
 
+
+scaler = GradScaler('cuda')
+
+class Trainer_ViT_smalldata:
+
+    def __init__(self, model_1, model_2, criterion, optimizer, train_dl, val_dl, train_dataset, val_dataset, device, num_epochs, patience, threshold, save_path):
+        self.model_1 = model_1
+        self.model_2 = model_2
+        self.criterion = criterion
+        self.optimizer = optimizer
+        self.train_dl = train_dl
+        self.val_dl = val_dl
+        self.train_dataset = train_dataset
+        self.val_dataset = val_dataset
+        self.device = device
+        self.num_epochs = num_epochs
+        self.patience = patience
+        self.threshold = threshold
+        self.best_val_avgmetric = 0
+        self.epochs_no_improve = 0
+        self.save_path = save_path
+
+        # Initialize the Tester instance
+        self.tester = Tester_ViT_smalldata(
+            model_1 = self.model_1,
+            model_2 = self.model_2,
+            criterion=self.criterion,
+            test_dl=self.val_dl,
+            test_dataset=self.val_dataset,
+            device=self.device,
+            threshold=self.threshold
+        )
+
+        # initialize TensorBoard SummaryWriter
+        self.writer = SummaryWriter(log_dir=f"runs/training/{self.model_2.__class__.__name__}")
+
+    def train_one_epoch(self):
+        self.model_1.train()
+        self.model_2.train()
+        train_loss = 0.0
+        train_correct = 0.0
+
+        for images, label in tqdm(self.train_dl):
+            images = images.float().to(device=self.device)
+            label = label.float().to(device=self.device)
+            with autocast(device_type='cuda'):
+
+                patient_cls_outputs = []
+                for i in range(images.size(1)):
+                    input = images[:, i, :, :]  
+                    input = input.unsqueeze(1)   # [8, 1, 224, 224]
+
+                    # forward pass for each patient image
+                    # output = model_output.logits if hasattr(model_output, 'logits') else model_output
+                    cls_output = self.model_1(input)
+                    patient_cls_outputs.append(cls_output)
+                patient_cls_outputs = torch.stack(patient_cls_outputs, dim=1) # [bs, 20, 768]
+
+                classifier_logit = self.model_2(patient_cls_outputs)
+                loss = self.criterion(classifier_logit, label.unsqueeze(1))
+
+            # backward and optimizer
+            self.optimizer.zero_grad()
+            scaler.scale(loss).backward()
+            scaler.step(self.optimizer)
+            scaler.update()
+
+            train_loss += loss.item()
+
+            train_result = (sigmoid(classifier_logit) > self.threshold).float()
+            train_correct += (train_result == label.unsqueeze(1)).sum().item()
+
+        train_accuracy = train_correct / len(self.train_dataset)
+
+        return train_loss, train_accuracy
+
+    def early_stopping(self, val_avgmetric):
+        if val_avgmetric > self.best_val_avgmetric:
+            self.best_val_avgmetric = val_avgmetric
+            self.epochs_no_improve = 0
+        
+            # Save the parameters of both models separately
+            torch.save(self.model_1.state_dict(), f'saved_models/{self.model_1.__class__.__name__}_best.pth')
+            torch.save(self.model_2.state_dict(), f'saved_models/{self.model_2.__class__.__name__}_best.pth')
+
+        else:
+            self.epochs_no_improve += 1
+
+        if self.epochs_no_improve >= self.patience:
+            print("Early stopping triggered")
+            return True
+        return False
+
+    def train(self):
+        self.train_losses = []
+        self.train_accuracies = []
+        self.val_losses = []
+        self.val_accuracies = []
+
+        for epoch in range(self.num_epochs):
+            print(f"Epoch {epoch+1}/{self.num_epochs}")
+            train_loss, train_accuracy = self.train_one_epoch()
+            self.train_losses.append(train_loss)
+            self.train_accuracies.append(train_accuracy)
+
+            print(f"Train Loss: {train_loss:.4f}, Train Accuracy: {train_accuracy:.4f}")
+
+            val_loss, val_accuracy, val_precision, val_recall, val_f1, val_auc, val_avgmetric, conf_matrix = self.tester.test(phase="Val")
+
+            self.val_losses.append(val_loss)
+            self.val_accuracies.append(val_accuracy)
+
+            # Log the losses and metrics to TensorBoard
+            self.writer.add_scalars('Loss', {
+            'Train': train_loss,
+            'Validation': val_loss
+            }, epoch)
+
+            self.writer.add_scalars('Accuracy', {
+            'Train': train_accuracy,
+            'Validation': val_accuracy
+            }, epoch)
+        
+            self.writer.add_scalars('F1', {
+            #    'Train': train_f1,
+                'Validation': val_f1
+            }, epoch)
+            
+            self.writer.add_scalars('Precision', {
+            #    'Train': train_precision,
+                'Validation': val_precision
+            }, epoch)
+            
+            self.writer.add_scalars('Recall', {
+            #    'Train': train_recall,
+                'Validation': val_recall
+            }, epoch)
+
+            self.writer.add_scalars('avg_metric', {
+            #    'Train': train_avgmetric,
+                'Validation': val_avgmetric
+            }, epoch)
+
+            self.writer.add_scalars('auc', {
+            #    'Train': train_auc,
+                'Validation': val_auc
+            }, epoch)
+            
+
+            if self.early_stopping(val_avgmetric):
+                    break
+
+        self.writer.close()
             
 
 # class Trainer:

@@ -170,6 +170,81 @@ class Tester_AutoencoderClassification:
         if phase == "Val":
             return test_loss, test_accuracy, precision, recall, f1, auc, avg_metric, conf_matrix
 
+class Tester_ViT_smalldata:
+    def __init__(self, model_1, model_2, criterion, test_dl, test_dataset, device, threshold=0.5):
+        self.model_1 = model_1
+        self.model_2 = model_2
+        self.criterion = criterion
+        self.test_dl = test_dl
+        self.test_dataset = test_dataset
+        self.device = device
+        self.threshold = threshold
+
+
+    @torch.no_grad()
+    def test(self, phase="Test"):
+        self.model_1.eval()
+        self.model_2.eval()
+        test_correct = 0.0
+        test_loss = 0.0
+        all_labels = []
+        all_preds = []
+        
+        for images, label in self.test_dl:
+            images = images.float().to(device=self.device)
+            label = label.float().to(device=self.device)
+
+            patient_cls_outputs = []
+
+            for i in range(images.size(1)):
+                input = images[:, i, :, :]
+                input = input.unsqueeze(1)  # [8, 1, 224, 224]
+
+                # forward pass
+                cls_output = self.model_1(input)
+                patient_cls_outputs.append(cls_output)
+            patient_cls_outputs = torch.stack(patient_cls_outputs, dim=1) # [bs, 20, 768]
+            
+            classifier_logit = self.model_2(patient_cls_outputs)
+            loss = self.criterion(classifier_logit, label.unsqueeze(1))
+
+            # output_list.append(output)
+            test_loss += loss.item()
+
+            test_result = (sigmoid(classifier_logit) > self.threshold).float()
+            test_correct += (test_result == label.unsqueeze(1)).sum().item()
+
+            all_labels.extend(label.cpu().numpy())
+            all_preds.extend(test_result.squeeze(1).cpu().numpy())
+
+        test_accuracy = test_correct / len(self.test_dataset)
+        all_labels = np.array(all_labels)
+        all_preds = np.array(all_preds)
+
+        if np.sum(all_preds) == 0:
+            precision = 0.0
+            recall = 0.0
+            f1 = 0.0
+        else:
+            precision = precision_score(all_labels, all_preds)
+            recall = recall_score(all_labels, all_preds)
+            f1 = f1_score(all_labels, all_preds)
+
+        auc = roc_auc_score(all_labels, all_preds)
+        avg_metric = (precision + recall + auc) / 3
+        conf_matrix = confusion_matrix(all_labels, all_preds)
+
+        print(f"{phase} Loss: {test_loss:.4f}, {phase} Accuracy: {test_accuracy:.4f}")
+        print(f"Precision: {precision:.4f}, Recall: {recall:.4f}, AUC: {auc:.4f}, Avg Metric: {avg_metric:.4f}")
+
+        # Print confusion matrix
+        print("Confusion Matrix:")
+        print(conf_matrix)
+
+        if phase == "Val":
+            return test_loss, test_accuracy, precision, recall, f1, auc, avg_metric, conf_matrix
+
+
 # class Tester:
 #     def __init__(self, model, test_dl, test_dataset, device, threshold):
 #         self.model = model
